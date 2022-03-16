@@ -1,6 +1,9 @@
 package com.jincou.core.starter;
 
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jincou.core.config.CacheRedisCaffeineProperties;
 import com.jincou.core.spring.RedisCaffeineCacheManager;
 import com.jincou.core.sync.CacheMessageListener;
@@ -16,10 +19,13 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 
 import java.net.UnknownHostException;
+import java.text.SimpleDateFormat;
 
 
 /**
@@ -38,8 +44,8 @@ public class CacheRedisCaffeineAutoConfiguration {
 
 	@Bean
 	@ConditionalOnBean(RedisTemplate.class)
-	public RedisCaffeineCacheManager cacheManager(RedisTemplate<Object, Object> redisTemplate) {
-		return new RedisCaffeineCacheManager(cacheRedisCaffeineProperties, redisTemplate);
+	public RedisCaffeineCacheManager cacheManager(RedisTemplate<Object, Object> stringKeyRedisTemplate) {
+		return new RedisCaffeineCacheManager(cacheRedisCaffeineProperties, stringKeyRedisTemplate);
 	}
 
 	@Bean
@@ -47,8 +53,9 @@ public class CacheRedisCaffeineAutoConfiguration {
 	public RedisTemplate<Object, Object> stringKeyRedisTemplate(RedisConnectionFactory redisConnectionFactory) throws UnknownHostException {
 		RedisTemplate<Object, Object> template = new RedisTemplate<Object, Object>();
 		template.setConnectionFactory(redisConnectionFactory);
-		template.setKeySerializer(new StringRedisSerializer());
-		template.setHashKeySerializer(new StringRedisSerializer());
+		RedisSerializer stringSerializer = new StringRedisSerializer();
+		template.setKeySerializer(stringSerializer);
+		template.setHashKeySerializer(stringSerializer);
 		return template;
 	}
 
