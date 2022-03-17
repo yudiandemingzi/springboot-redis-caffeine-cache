@@ -33,11 +33,14 @@ public class RedisCaffeineCache extends AbstractValueAdaptingCache {
 	private String cacheName;
 
 	/**
+	 * 一级缓存
+	 */
+	private Cache<Object, Object> level1Cache;
+
+	/**
 	 * 二级缓存实例
 	 */
-	private RedisCache redisCache;
-
-	private Cache<Object, Object> caffeineCache;
+	private RedisCache level2Cache;
 
 
 	private long defaultExpiration = 0;
@@ -45,6 +48,8 @@ public class RedisCaffeineCache extends AbstractValueAdaptingCache {
 	private Map<String, Long> expires;
 
 	private L2CacheConfig.Composite composite;
+
+	private L2CacheConfig.Redis redisConfig;
 
 	/**
 	 * 记录是否启用过一级缓存，只要启用过，则记录为true
@@ -62,17 +67,17 @@ public class RedisCaffeineCache extends AbstractValueAdaptingCache {
 		super(allowNullValues);
 	}
 
-	public RedisCaffeineCache(String cacheName, RedisCache redisCache,
-							  Cache<Object, Object> caffeineCache, L2CacheConfig l2CacheConfig) {
+	public RedisCaffeineCache(String cacheName, RedisCache level2Cache,
+							  Cache<Object, Object> level1Cache, L2CacheConfig l2CacheConfig) {
 		super(l2CacheConfig.isAllowNullValues());
 		this.cacheName = cacheName;
-		this.redisCache = redisCache;
-		this.caffeineCache = caffeineCache;
+		this.level2Cache = level2Cache;
+		this.level1Cache = level1Cache;
 		this.defaultExpiration = l2CacheConfig.getRedis().getDefaultExpiration();
 		this.expires = l2CacheConfig.getRedis().getExpires();
 		this.topic = l2CacheConfig.getRedis().getTopic();
 		this.composite = l2CacheConfig.getComposite();
-
+		this.redisConfig = l2CacheConfig.getRedis();
 	}
 
 	@Override
@@ -118,20 +123,25 @@ public class RedisCaffeineCache extends AbstractValueAdaptingCache {
 
 	@Override
 	public void put(Object key, Object value) {
+		//如果value不能放空，但实际value为空，那么把数据情掉就好。
 		if (!super.isAllowNullValues() && value == null) {
 			this.evict(key);
 			return;
 		}
 		long expire = getExpire();
 		if (expire > 0) {
-			redisCache.set(getKey(key), toStoreValue(value), expire);
+			level2Cache.set(getKey(key), toStoreValue(value), expire);
 		} else {
-			redisCache.set(getKey(key), toStoreValue(value));
+			level2Cache.set(getKey(key), toStoreValue(value));
 		}
 
-		push(new CacheMessage(this.cacheName, key));
-
-		caffeineCache.put(key, value);
+		// 是否开启一级缓存
+		boolean ifL1Open = ifL1Open(getKey(key));
+		if (ifL1Open) {
+			//通知其它节点
+			push(new CacheMessage(this.cacheName, key));
+			level1Cache.put(key, toStoreValue(value));
+		}
 	}
 
 	@Override
@@ -140,18 +150,18 @@ public class RedisCaffeineCache extends AbstractValueAdaptingCache {
 		Object prevValue = null;
 		// 考虑使用分布式锁，或者将redis的setIfAbsent改为原子性操作
 		synchronized (key) {
-			prevValue = redisCache.get(cacheKey);
+			prevValue = level2Cache.get(cacheKey);
 			if (prevValue == null) {
 				long expire = getExpire();
 				if (expire > 0) {
-					redisCache.set(getKey(key), toStoreValue(value), expire);
+					level2Cache.set(getKey(key), toStoreValue(value), expire);
 				} else {
-					redisCache.set(getKey(key), toStoreValue(value));
+					level2Cache.set(getKey(key), toStoreValue(value));
 				}
 
 				push(new CacheMessage(this.cacheName, key));
 
-				caffeineCache.put(key, toStoreValue(value));
+				level1Cache.put(key, toStoreValue(value));
 			}
 		}
 		return toValueWrapper(prevValue);
@@ -160,40 +170,52 @@ public class RedisCaffeineCache extends AbstractValueAdaptingCache {
 	@Override
 	public void evict(Object key) {
 		// 先清除redis中缓存数据，然后清除caffeine中的缓存，避免短时间内如果先清除caffeine缓存后其他请求会再从redis里加载到caffeine中
-		redisCache.delete(getKey(key));
+		level2Cache.delete(getKey(key));
 
 		push(new CacheMessage(this.cacheName, key));
 
-		caffeineCache.invalidate(key);
+		level1Cache.invalidate(key);
 	}
 
 	@Override
 	public void clear() {
 		// 先清除redis中缓存数据，然后清除caffeine中的缓存，避免短时间内如果先清除caffeine缓存后其他请求会再从redis里加载到caffeine中
-		Set<String> keys = redisCache.keys(this.cacheName.concat(":*"));
+		Set<String> keys = level2Cache.keys(this.cacheName.concat(":*"));
 		for (String key : keys) {
-			redisCache.delete(key);
+			level2Cache.delete(key);
 		}
 
 		push(new CacheMessage(this.cacheName, null));
 
-		caffeineCache.invalidateAll();
+		level1Cache.invalidateAll();
 	}
 
 	@Override
 	protected Object lookup(Object key) {
+		Object value = null;
+        //处理key
 		String cacheKey = getKey(key);
-		Object value = caffeineCache.getIfPresent(key);
-		if (value != null) {
-			logger.debug("get cache from caffeine, the key is : {}", cacheKey);
-			return value;
+
+		// 是否开启一级缓存
+		boolean ifL1Open = ifL1Open(cacheKey);
+		if (ifL1Open) {
+			// 从L1获取缓存
+			value = level1Cache.getIfPresent(cacheKey);
+			if (value != null) {
+				if (logger.isDebugEnabled()) {
+					logger.debug("level1Cache get cache, cacheName={}, key={}, value={}", this.getName(), key, value);
+				}
+				return value;
+			}
 		}
 
-		value = redisCache.get(cacheKey);
-
-		if (value != null) {
-			logger.debug("get cache from redis and put in caffeine, the key is : {}", cacheKey);
-			caffeineCache.put(key, value);
+		// 从L2获取缓存
+		value = level2Cache.get(cacheKey);
+		if (value != null && ifL1Open) {
+			if (logger.isDebugEnabled()) {
+				logger.debug("level2Cache get cache and put in level1Cache, cacheName={}, key={}, value={}", this.getName(), key, value);
+			}
+			level1Cache.put(key, toStoreValue(value));
 		}
 		return value;
 	}
@@ -216,7 +238,7 @@ public class RedisCaffeineCache extends AbstractValueAdaptingCache {
 	 * @version 1.0.0
 	 */
 	private void push(CacheMessage message) {
-		redisCache.getRedisTemplate().convertAndSend(topic, message);
+		level2Cache.getRedisTemplate().convertAndSend(redisConfig.getTopic(), message);
 	}
 
 	/**
@@ -229,9 +251,9 @@ public class RedisCaffeineCache extends AbstractValueAdaptingCache {
 	public void clearLocal(Object key) {
 		logger.debug("clear local cache, the key is : {}", key);
 		if (key == null) {
-			caffeineCache.invalidateAll();
+			level1Cache.invalidateAll();
 		} else {
-			caffeineCache.invalidate(key);
+			level1Cache.invalidate(key);
 		}
 	}
 

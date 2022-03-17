@@ -9,6 +9,7 @@ import com.jincou.core.sync.CacheMessageListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -41,10 +42,10 @@ public class CacheRedisCaffeineAutoConfiguration {
 	private L2CacheProperties l2CacheProperties;
 
 	@Bean
-	@ConditionalOnBean(RedisCache.class)
+	@ConditionalOnClass(RedisCache.class)
 	@Order(2)
-	public RedisCaffeineCacheManager cacheManager(RedisCache redisService) {
-		return new RedisCaffeineCacheManager(l2CacheProperties.getConfig(),redisService);
+	public RedisCaffeineCacheManager cacheManager(RedisCache redisCache) {
+		return new RedisCaffeineCacheManager(l2CacheProperties.getConfig(),redisCache);
 	}
 
 	@Bean
@@ -59,22 +60,23 @@ public class CacheRedisCaffeineAutoConfiguration {
 	}
 
 	@Bean
-	@ConditionalOnBean(RedisCache.class)
-	public RedisMessageListenerContainer redisMessageListenerContainer(RedisCache redisService,
-																	   RedisCaffeineCacheManager redisCaffeineCacheManager) {
+	@ConditionalOnClass(RedisCache.class)
+	@Order(3)
+	public RedisMessageListenerContainer redisMessageListenerContainer(RedisCache redisCache,
+																	   RedisCaffeineCacheManager cacheManager) {
 		RedisMessageListenerContainer redisMessageListenerContainer = new RedisMessageListenerContainer();
-		redisMessageListenerContainer.setConnectionFactory(redisService.getRedisTemplate().getConnectionFactory());
-		CacheMessageListener cacheMessageListener = new CacheMessageListener(redisService, redisCaffeineCacheManager);
-		redisMessageListenerContainer.addMessageListener(cacheMessageListener, new ChannelTopic(l2CacheProperties.getConfig().getCacheSyncPolicy().getTopic()));
+		redisMessageListenerContainer.setConnectionFactory(redisCache.getRedisTemplate().getConnectionFactory());
+		CacheMessageListener cacheMessageListener = new CacheMessageListener(redisCache, cacheManager);
+		redisMessageListenerContainer.addMessageListener(cacheMessageListener, new ChannelTopic(l2CacheProperties.getConfig().getRedis().getTopic()));
 		return redisMessageListenerContainer;
 	}
 
 	@Bean
 	@ConditionalOnBean(RedisTemplate.class)
 	@Order(1)
-	public RedisCache redisService(RedisTemplate<Object, Object> stringKeyRedisTemplate) {
-		RedisCache redisService = new RedisCache();
-		redisService.setRedisTemplate(stringKeyRedisTemplate);
-		return redisService;
+	public RedisCache redisCache(RedisTemplate<Object, Object> stringKeyRedisTemplate) {
+		RedisCache redisCache = new RedisCache();
+		redisCache.setRedisTemplate(stringKeyRedisTemplate);
+		return redisCache;
 	}
 }

@@ -249,7 +249,6 @@ public class L2CacheConfig {
          */
         private Map<String, Integer> duplicateCacheNameMap = new HashMap<>();
 
-
     }
 
     /**
@@ -267,10 +266,7 @@ public class L2CacheConfig {
          */
         private String type;
 
-        /**
-         * 缓存更新时通知其他节点的topic名称
-         */
-        private String topic = "l2cache";
+
 
         /**
          * 是否支持异步发送消息
