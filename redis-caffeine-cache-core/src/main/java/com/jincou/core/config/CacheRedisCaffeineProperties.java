@@ -15,7 +15,7 @@ import java.util.Set;
  * @author xub
  * @date 2022/3/16 上午10:30
  */
-@ConfigurationProperties(prefix = "spring.cache.multi")
+//@ConfigurationProperties(prefix = "spring.cache.multi")
 public class CacheRedisCaffeineProperties {
 
 	private Set<String> cacheNames = new HashSet<>();

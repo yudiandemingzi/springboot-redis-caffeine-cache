@@ -1,10 +1,9 @@
 package com.jincou.core.starter;
 
 
-import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import com.fasterxml.jackson.annotation.PropertyAccessor;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jincou.core.config.CacheRedisCaffeineProperties;
+
+import com.jincou.core.cache.RedisCache;
+import com.jincou.core.config.L2CacheProperties;
 import com.jincou.core.spring.RedisCaffeineCacheManager;
 import com.jincou.core.sync.CacheMessageListener;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,17 +14,16 @@ import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
-import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 
 import java.net.UnknownHostException;
-import java.text.SimpleDateFormat;
 
 
 /**
@@ -36,22 +34,23 @@ import java.text.SimpleDateFormat;
  */
 @Configuration
 @AutoConfigureAfter(RedisAutoConfiguration.class)
-@EnableConfigurationProperties(CacheRedisCaffeineProperties.class)
+@EnableConfigurationProperties(L2CacheProperties.class)
 public class CacheRedisCaffeineAutoConfiguration {
 
 	@Autowired
-	private CacheRedisCaffeineProperties cacheRedisCaffeineProperties;
+	private L2CacheProperties l2CacheProperties;
 
 	@Bean
-	@ConditionalOnBean(RedisTemplate.class)
-	public RedisCaffeineCacheManager cacheManager(RedisTemplate<Object, Object> stringKeyRedisTemplate) {
-		return new RedisCaffeineCacheManager(cacheRedisCaffeineProperties, stringKeyRedisTemplate);
+	@ConditionalOnBean(RedisCache.class)
+	@Order(2)
+	public RedisCaffeineCacheManager cacheManager(RedisCache redisService) {
+		return new RedisCaffeineCacheManager(l2CacheProperties.getConfig(),redisService);
 	}
 
 	@Bean
 	@ConditionalOnMissingBean(name = "stringKeyRedisTemplate")
 	public RedisTemplate<Object, Object> stringKeyRedisTemplate(RedisConnectionFactory redisConnectionFactory) throws UnknownHostException {
-		RedisTemplate<Object, Object> template = new RedisTemplate<Object, Object>();
+		RedisTemplate<Object, Object> template = new RedisTemplate<>();
 		template.setConnectionFactory(redisConnectionFactory);
 		RedisSerializer stringSerializer = new StringRedisSerializer();
 		template.setKeySerializer(stringSerializer);
@@ -60,12 +59,22 @@ public class CacheRedisCaffeineAutoConfiguration {
 	}
 
 	@Bean
-	public RedisMessageListenerContainer redisMessageListenerContainer(RedisTemplate<Object, Object> stringKeyRedisTemplate,
+	@ConditionalOnBean(RedisCache.class)
+	public RedisMessageListenerContainer redisMessageListenerContainer(RedisCache redisService,
 																	   RedisCaffeineCacheManager redisCaffeineCacheManager) {
 		RedisMessageListenerContainer redisMessageListenerContainer = new RedisMessageListenerContainer();
-		redisMessageListenerContainer.setConnectionFactory(stringKeyRedisTemplate.getConnectionFactory());
-		CacheMessageListener cacheMessageListener = new CacheMessageListener(stringKeyRedisTemplate, redisCaffeineCacheManager);
-		redisMessageListenerContainer.addMessageListener(cacheMessageListener, new ChannelTopic(cacheRedisCaffeineProperties.getRedis().getTopic()));
+		redisMessageListenerContainer.setConnectionFactory(redisService.getRedisTemplate().getConnectionFactory());
+		CacheMessageListener cacheMessageListener = new CacheMessageListener(redisService, redisCaffeineCacheManager);
+		redisMessageListenerContainer.addMessageListener(cacheMessageListener, new ChannelTopic(l2CacheProperties.getConfig().getCacheSyncPolicy().getTopic()));
 		return redisMessageListenerContainer;
+	}
+
+	@Bean
+	@ConditionalOnBean(RedisTemplate.class)
+	@Order(1)
+	public RedisCache redisService(RedisTemplate<Object, Object> stringKeyRedisTemplate) {
+		RedisCache redisService = new RedisCache();
+		redisService.setRedisTemplate(stringKeyRedisTemplate);
+		return redisService;
 	}
 }

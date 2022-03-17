@@ -1,12 +1,12 @@
 package com.jincou.core.spring;
 
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.jincou.core.config.CacheRedisCaffeineProperties;
+import com.jincou.core.cache.RedisCache;
+import com.jincou.core.config.L2CacheConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
-import org.springframework.data.redis.core.RedisTemplate;
 
 import java.util.Collection;
 import java.util.Set;
@@ -27,21 +27,23 @@ public class RedisCaffeineCacheManager implements CacheManager {
 
 	private ConcurrentMap<String, Cache> cacheMap = new ConcurrentHashMap<String, Cache>();
 
-	private CacheRedisCaffeineProperties cacheRedisCaffeineProperties;
+	private L2CacheConfig l2CacheConfig;
 
-	private RedisTemplate<Object, Object> stringKeyRedisTemplate;
+
+	private RedisCache redisService;
+
 
 	private boolean dynamic = true;
 
 	private Set<String> cacheNames;
 
-	public RedisCaffeineCacheManager(CacheRedisCaffeineProperties cacheRedisCaffeineProperties,
-                                     RedisTemplate<Object, Object> stringKeyRedisTemplate) {
+	public RedisCaffeineCacheManager(L2CacheConfig l2CacheConfig,
+									 RedisCache redisService) {
 		super();
-		this.cacheRedisCaffeineProperties = cacheRedisCaffeineProperties;
-		this.stringKeyRedisTemplate = stringKeyRedisTemplate;
-		this.dynamic = cacheRedisCaffeineProperties.isDynamic();
-		this.cacheNames = cacheRedisCaffeineProperties.getCacheNames();
+		this.l2CacheConfig = l2CacheConfig;
+		this.redisService = redisService;
+		this.dynamic = l2CacheConfig.isDynamic();
+		this.cacheNames = l2CacheConfig.getCacheNames();
 	}
 
 	@Override
@@ -54,7 +56,7 @@ public class RedisCaffeineCacheManager implements CacheManager {
 			return cache;
 		}
 
-		cache = new RedisCaffeineCache(name, stringKeyRedisTemplate, caffeineCache(), cacheRedisCaffeineProperties);
+		cache = new RedisCaffeineCache(name, redisService, caffeineCache(), l2CacheConfig);
 		Cache oldCache = cacheMap.putIfAbsent(name, cache);
 		logger.debug("create cache instance, the cache name is : {}", name);
 		return oldCache == null ? cache : oldCache;
@@ -62,20 +64,20 @@ public class RedisCaffeineCacheManager implements CacheManager {
 
 	public com.github.benmanes.caffeine.cache.Cache<Object, Object> caffeineCache(){
 		Caffeine<Object, Object> cacheBuilder = Caffeine.newBuilder();
-		if(cacheRedisCaffeineProperties.getCaffeine().getExpireAfterAccess() > 0) {
-			cacheBuilder.expireAfterAccess(cacheRedisCaffeineProperties.getCaffeine().getExpireAfterAccess(), TimeUnit.MILLISECONDS);
+		if(l2CacheConfig.getCaffeine().getExpireAfterAccess() > 0) {
+			cacheBuilder.expireAfterAccess(l2CacheConfig.getCaffeine().getExpireAfterAccess(), TimeUnit.MILLISECONDS);
 		}
-		if(cacheRedisCaffeineProperties.getCaffeine().getExpireAfterWrite() > 0) {
-			cacheBuilder.expireAfterWrite(cacheRedisCaffeineProperties.getCaffeine().getExpireAfterWrite(), TimeUnit.MILLISECONDS);
+		if(l2CacheConfig.getCaffeine().getExpireAfterWrite() > 0) {
+			cacheBuilder.expireAfterWrite(l2CacheConfig.getCaffeine().getExpireAfterWrite(), TimeUnit.MILLISECONDS);
 		}
-		if(cacheRedisCaffeineProperties.getCaffeine().getInitialCapacity() > 0) {
-			cacheBuilder.initialCapacity(cacheRedisCaffeineProperties.getCaffeine().getInitialCapacity());
+		if(l2CacheConfig.getCaffeine().getInitialCapacity() > 0) {
+			cacheBuilder.initialCapacity(l2CacheConfig.getCaffeine().getInitialCapacity());
 		}
-		if(cacheRedisCaffeineProperties.getCaffeine().getMaximumSize() > 0) {
-			cacheBuilder.maximumSize(cacheRedisCaffeineProperties.getCaffeine().getMaximumSize());
+		if(l2CacheConfig.getCaffeine().getMaximumSize() > 0) {
+			cacheBuilder.maximumSize(l2CacheConfig.getCaffeine().getMaximumSize());
 		}
-		if(cacheRedisCaffeineProperties.getCaffeine().getRefreshAfterWrite() > 0) {
-			cacheBuilder.refreshAfterWrite(cacheRedisCaffeineProperties.getCaffeine().getRefreshAfterWrite(), TimeUnit.MILLISECONDS);
+		if(l2CacheConfig.getCaffeine().getRefreshAfterWrite() > 0) {
+			cacheBuilder.refreshAfterWrite(l2CacheConfig.getCaffeine().getRefreshAfterWrite(), TimeUnit.MILLISECONDS);
 		}
 		return cacheBuilder.build();
 	}
