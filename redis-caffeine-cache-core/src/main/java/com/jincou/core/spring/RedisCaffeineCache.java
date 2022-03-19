@@ -110,6 +110,7 @@ public class RedisCaffeineCache extends AbstractValueAdaptingCache {
 			if (value != null) {
 				return (T) value;
 			}
+			//代表走被拦截的方法逻辑,并返回方法的返回结果
 			value = valueLoader.call();
 			Object storeValue = toStoreValue(value);
 			put(key, storeValue);
@@ -144,6 +145,9 @@ public class RedisCaffeineCache extends AbstractValueAdaptingCache {
 		}
 	}
 
+	/**
+	 * 使用putIfAbsent方法添加键值对，如果map集合中没有该key对应的值，则直接添加，并返回null，如果已经存在对应的值，则依旧为原来的值。
+	 */
 	@Override
 	public ValueWrapper putIfAbsent(Object key, Object value) {
 		String cacheKey = getKey(key);
@@ -190,6 +194,9 @@ public class RedisCaffeineCache extends AbstractValueAdaptingCache {
 		level1Cache.invalidateAll();
 	}
 
+	/**
+	 *
+	 */
 	@Override
 	protected Object lookup(Object key) {
 		Object value = null;
@@ -200,7 +207,7 @@ public class RedisCaffeineCache extends AbstractValueAdaptingCache {
 		boolean ifL1Open = ifL1Open(cacheKey);
 		if (ifL1Open) {
 			// 从L1获取缓存
-			value = level1Cache.getIfPresent(cacheKey);
+			value = level1Cache.getIfPresent(key);
 			if (value != null) {
 				if (logger.isDebugEnabled()) {
 					logger.debug("level1Cache get cache, cacheName={}, key={}, value={}", this.getName(), key, value);

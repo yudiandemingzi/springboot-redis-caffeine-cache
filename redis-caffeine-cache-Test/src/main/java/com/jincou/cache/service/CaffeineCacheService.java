@@ -26,8 +26,6 @@ public class CaffeineCacheService {
 
     private final Logger logger = LoggerFactory.getLogger(CaffeineCacheService.class);
 
-
-
     /**
      * 用于模拟db
      */
@@ -44,7 +42,7 @@ public class CaffeineCacheService {
      * 获取或加载缓存项
      * <p>
      */
-    @Cacheable(key = "'cache_user_id_' + #userId", value = "userIdCache", cacheManager = "cacheManager")
+    @Cacheable(key = "'cache_user_id_' + #userId", value = "userCache")
     public UserDTO queryUser(String userId) {
         UserDTO userDTO = userMap.get(userId);
         try {
@@ -56,12 +54,6 @@ public class CaffeineCacheService {
         return userDTO;
     }
 
-    @Cacheable(value = "queryUserSync", key = "#userId", sync = true)
-    public UserDTO queryUserSync(String userId) {
-        UserDTO userDTO = userMap.get(userId);
-        logger.info("加载数据:{}", userDTO);
-        return userDTO;
-    }
 
     /**
      * 获取或加载缓存项
@@ -71,9 +63,8 @@ public class CaffeineCacheService {
      * sync=true，是通过get(Object key, Callable<T> valueLoader)来获取或加载缓存项，此时valueLoader（加载缓存项的具体逻辑）会被缓存起来，所以CaffeineCache在定时刷新过期缓存时，缓存项过期则会重新加载。
      * sync=false，是通过get(Object key)来获取缓存项，由于没有valueLoader（加载缓存项的具体逻辑），所以CaffeineCache在定时刷新过期缓存时，缓存项过期则会被淘汰。
      * <p>
-     * 建议：设置@Cacheable的sync=true，可以利用Caffeine的特性，防止缓存击穿（方式同一个key和不同key）
      */
-    @Cacheable(value = "queryUserSyncList", key = "#userId", sync = true)
+    @Cacheable(value = "userCache", key = "#userId", sync = true)
     public List<UserDTO> queryUserSyncList(String userId) {
         UserDTO userDTO = userMap.get(userId);
         List<UserDTO> list = new ArrayList();
@@ -83,11 +74,9 @@ public class CaffeineCacheService {
     }
 
     /**
-     * 设置缓存
-     * 注：通过 @CachePut 标注的方法添加的缓存项，在CaffeineCache的定时刷新过期缓存任务执行时，缓存项过期则会被淘汰。
-     * 如果先执行了 @Cacheable(sync = true) 标注的方法，再执行 @CachePut 标注的方法，那么在CaffeineCache的定时刷新过期缓存任务执行时，缓存项过期则会重新加载。
+     * 更新缓存
      */
-    @CachePut(value = "userCacheSync", key = "#userId")
+    @CachePut(value = "userCache", key = "#userId")
     public UserDTO putUser(String userId, UserDTO userDTO) {
         return userDTO;
     }
@@ -95,7 +84,7 @@ public class CaffeineCacheService {
     /**
      * 淘汰缓存
      */
-    @CacheEvict(value = "userCacheSync", key = "#userId")
+    @CacheEvict(value = "userCache", key = "#userId")
     public String evictUserSync(String userId) {
         return userId;
     }

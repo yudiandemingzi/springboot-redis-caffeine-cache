@@ -26,16 +26,13 @@ public class CaffeineCacheController {
     CaffeineCacheService caffeineCacheService;
 
 
-
     @RequestMapping(value = "/queryUser")
     public UserDTO queryUser(String userId) {
-        return caffeineCacheService.queryUser(userId);
+         UserDTO userDTO = caffeineCacheService.queryUser(userId);
+
+        return userDTO;
     }
 
-    @RequestMapping(value = "/queryUserSync")
-    public UserDTO queryUserSync(String userId) {
-        return caffeineCacheService.queryUserSync(userId);
-    }
 
     @RequestMapping(value = "/queryUserSyncList")
     public List<UserDTO> queryUserSyncList(String userId) {

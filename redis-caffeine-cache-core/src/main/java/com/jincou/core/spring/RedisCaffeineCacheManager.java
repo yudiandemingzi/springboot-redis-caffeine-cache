@@ -65,10 +65,10 @@ public class RedisCaffeineCacheManager implements CacheManager {
 	public com.github.benmanes.caffeine.cache.Cache<Object, Object> caffeineCache(){
 		Caffeine<Object, Object> cacheBuilder = Caffeine.newBuilder();
 		if(l2CacheConfig.getCaffeine().getExpireAfterAccess() > 0) {
-			cacheBuilder.expireAfterAccess(l2CacheConfig.getCaffeine().getExpireAfterAccess(), TimeUnit.MILLISECONDS);
+			cacheBuilder.expireAfterAccess(l2CacheConfig.getCaffeine().getExpireAfterAccess(), TimeUnit.SECONDS);
 		}
 		if(l2CacheConfig.getCaffeine().getExpireAfterWrite() > 0) {
-			cacheBuilder.expireAfterWrite(l2CacheConfig.getCaffeine().getExpireAfterWrite(), TimeUnit.MILLISECONDS);
+			cacheBuilder.expireAfterWrite(l2CacheConfig.getCaffeine().getExpireAfterWrite(), TimeUnit.SECONDS);
 		}
 		if(l2CacheConfig.getCaffeine().getInitialCapacity() > 0) {
 			cacheBuilder.initialCapacity(l2CacheConfig.getCaffeine().getInitialCapacity());
@@ -77,7 +77,7 @@ public class RedisCaffeineCacheManager implements CacheManager {
 			cacheBuilder.maximumSize(l2CacheConfig.getCaffeine().getMaximumSize());
 		}
 		if(l2CacheConfig.getCaffeine().getRefreshAfterWrite() > 0) {
-			cacheBuilder.refreshAfterWrite(l2CacheConfig.getCaffeine().getRefreshAfterWrite(), TimeUnit.MILLISECONDS);
+			cacheBuilder.refreshAfterWrite(l2CacheConfig.getCaffeine().getRefreshAfterWrite(), TimeUnit.SECONDS);
 		}
 		return cacheBuilder.build();
 	}
